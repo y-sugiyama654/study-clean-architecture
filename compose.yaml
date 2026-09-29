@@ -1,0 +1,14 @@
+# compose.yaml
+# ローカル開発用のPostgreSQL。起動時に db/schema.sql でテーブルを作る。
+# 手元で動かすためだけのものなので、パスワードなし（trust）で接続できるようにしている
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_DB: tasks
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
