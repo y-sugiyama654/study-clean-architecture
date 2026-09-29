@@ -1,23 +1,42 @@
 // cmd/api/main.go
 //
-// 第6章の時点では、メモリ上のリポジトリを使ってAPIを動かす
+// 第7章の時点では、設定・ログ・PostgreSQL・ルーターを組み合わせてAPIを動かす
 package main
 
 import (
+	"context"
 	"log"
+	"log/slog"
 	"net/http"
+	"os"
 
 	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/controller"
-	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/gateway/memory"
+	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/gateway/postgres"
+	"github.com/y-sugiyama654/study-clean-architecture/internal/infrastructure/config"
+	"github.com/y-sugiyama654/study-clean-architecture/internal/infrastructure/database"
+	"github.com/y-sugiyama654/study-clean-architecture/internal/infrastructure/logger"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/infrastructure/system"
+	"github.com/y-sugiyama654/study-clean-architecture/internal/infrastructure/web"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/usecase"
 )
 
 func main() {
-	repo := memory.NewTaskRepository()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatal(err)
+	}
+	lg := logger.New(os.Stdout, cfg.LogLevel)
+
+	db, err := database.OpenPostgres(context.Background(), cfg.DatabaseURL)
+	if err != nil {
+		lg.Error("データベースに接続できません", "error", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+
+	repo := postgres.NewTaskRepository(db)
 	clock := system.Clock{}
 	ids := system.UUIDGenerator{}
-
 	ctrl := controller.NewTaskController(
 		usecase.NewCreateTask(repo, ids, clock),
 		usecase.NewGetTask(repo),
@@ -25,12 +44,10 @@ func main() {
 		usecase.NewCompleteTask(repo, clock),
 	)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /tasks", ctrl.Create)
-	mux.HandleFunc("GET /tasks", ctrl.List)
-	mux.HandleFunc("GET /tasks/{id}", ctrl.Get)
-	mux.HandleFunc("POST /tasks/{id}/complete", ctrl.Complete)
-
-	log.Println("listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: web.NewRouter(ctrl)}
+	lg.Info("HTTPサーバーを起動します", slog.String("addr", cfg.HTTPAddr))
+	if err := srv.ListenAndServe(); err != nil {
+		lg.Error("HTTPサーバーが停止しました", "error", err)
+		os.Exit(1)
+	}
 }

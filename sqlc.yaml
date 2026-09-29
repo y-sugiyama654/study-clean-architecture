@@ -1,0 +1,11 @@
+# sqlc.yaml
+# db/queries のSQLから、型付きのGoのコードを生成する
+version: "2"
+sql:
+  - engine: "postgresql"
+    schema: "db/schema.sql"
+    queries: "db/queries"
+    gen:
+      go:
+        package: "sqlcgen"
+        out: "internal/adapter/gateway/postgres/sqlcgen"
