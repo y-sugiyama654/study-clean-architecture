@@ -12,6 +12,7 @@ import (
 
 	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/controller"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/gateway/memory"
+	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/middleware"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/domain"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/usecase"
 )
@@ -45,7 +46,8 @@ func newController() *controller.TaskController {
 func do(h http.HandlerFunc, method, path, userID, body string, pathID string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	if userID != "" {
-		req.Header.Set("X-User-ID", userID)
+		// 本来は認証ミドルウェアが入れる、認証済みのユーザーIDを context に入れる
+		req = req.WithContext(middleware.WithUserID(req.Context(), domain.UserID(userID)))
 	}
 	if pathID != "" {
 		req.SetPathValue("id", pathID) // ルーターを通さないので、パスパラメータを自分で設定する
@@ -98,7 +100,6 @@ func TestTaskController_ErrorStatus(t *testing.T) {
 	}{
 		{"JSONが壊れている", do(c.Create, "POST", "/tasks", "user-1", `{"title":`, ""), http.StatusBadRequest},
 		{"タイトルが空", do(c.Create, "POST", "/tasks", "user-1", `{"title":""}`, ""), http.StatusBadRequest},
-		{"ユーザーIDがない", do(c.Create, "POST", "/tasks", "", `{"title":"牛乳を買う"}`, ""), http.StatusBadRequest},
 		{"存在しないタスク", do(c.Get, "GET", "/tasks/nope", "user-1", "", "nope"), http.StatusNotFound},
 		{"他人のタスク", do(c.Get, "GET", "/tasks/task-1", "user-2", "", "task-1"), http.StatusNotFound},
 		{"完了済みのタスクを完了", do(c.Complete, "POST", "/tasks/task-1/complete", "user-1", "", "task-1"), http.StatusConflict},

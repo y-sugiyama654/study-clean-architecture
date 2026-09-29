@@ -14,7 +14,9 @@ import (
 	"time"
 
 	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/controller"
+	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/decorator"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/gateway/postgres"
+	"github.com/y-sugiyama654/study-clean-architecture/internal/infrastructure/auth"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/infrastructure/config"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/infrastructure/database"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/infrastructure/logger"
@@ -37,6 +39,7 @@ func run() error {
 		return err
 	}
 	lg := logger.New(os.Stdout, cfg.LogLevel)
+	slog.SetDefault(lg)
 
 	// Ctrl+C（SIGINT）やコンテナ停止時のSIGTERMで、ctxがキャンセルされる
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -53,7 +56,7 @@ func run() error {
 		return err
 	}
 	srv := &http.Server{
-		Handler:           newHandler(db),
+		Handler:           newHandler(cfg, db, lg),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	lg.Info("HTTPサーバーを起動します", slog.String("addr", ln.Addr().String()))
@@ -62,7 +65,7 @@ func run() error {
 
 // newHandler は、アプリケーションを構成するオブジェクトをすべて組み立てる（Composition Root）
 // 具体的な実装（PostgreSQLのリポジトリ、実際の時計など）を選んで結びつけるのは、ここだけ
-func newHandler(db *sql.DB) http.Handler {
+func newHandler(cfg config.Config, db *sql.DB, lg *slog.Logger) http.Handler {
 	// Frameworks & Drivers / Interface Adapters
 	tx := postgres.NewTransactor(db)
 	repo := postgres.NewTaskRepository(db)
@@ -70,15 +73,17 @@ func newHandler(db *sql.DB) http.Handler {
 	clock := system.Clock{}
 	ids := system.UUIDGenerator{}
 
-	// Use Cases
-	createTask := usecase.NewCreateTask(tx, repo, activities, ids, clock)
-	getTask := usecase.NewGetTask(repo)
-	listTasks := usecase.NewListTasks(repo)
-	completeTask := usecase.NewCompleteTask(tx, repo, activities, clock)
+	verifier := auth.NewStaticTokenVerifier(cfg.APITokens)
+
+	// Use Cases（ログ出力のデコレータで包む）
+	createTask := decorator.WithLogging("CreateTask", usecase.NewCreateTask(tx, repo, activities, ids, clock), lg)
+	getTask := decorator.WithLogging("GetTask", usecase.NewGetTask(repo), lg)
+	listTasks := decorator.WithLogging("ListTasks", usecase.NewListTasks(repo), lg)
+	completeTask := decorator.WithLogging("CompleteTask", usecase.NewCompleteTask(tx, repo, activities, clock), lg)
 
 	// Interface Adapters
 	tasks := controller.NewTaskController(createTask, getTask, listTasks, completeTask)
 
 	// Frameworks & Drivers
-	return web.NewRouter(tasks)
+	return web.NewRouter(tasks, verifier, lg)
 }

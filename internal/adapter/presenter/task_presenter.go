@@ -4,6 +4,7 @@ package presenter
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -22,9 +23,18 @@ type TaskResponse struct {
 }
 
 // ErrorResponse はエラーのJSON表現
+// code はプログラムで分岐するための値、message は人が読むための説明
 type ErrorResponse struct {
-	Error string `json:"error"`
+	Error ErrorBody `json:"error"`
 }
+
+type ErrorBody struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// InternalErrorMessage は、サーバー内部のエラーのときにクライアントへ返す文言
+const InternalErrorMessage = "サーバー内部でエラーが発生しました"
 
 // NewTaskResponse はユースケースの出力をレスポンスの形に変換する
 func NewTaskResponse(out usecase.TaskOutput) TaskResponse {
@@ -54,26 +64,28 @@ func JSON(w http.ResponseWriter, status int, body any) {
 	json.NewEncoder(w).Encode(body)
 }
 
-// Error はエラーの分類に応じたステータスコードでエラーを返す
-func Error(w http.ResponseWriter, err error) {
-	status := statusOf(err)
+// Error はエラーの分類に応じたステータスコードとコードでエラーを返す
+func Error(w http.ResponseWriter, r *http.Request, err error) {
+	status, code := classify(err)
 	msg := err.Error()
 	if status == http.StatusInternalServerError {
-		msg = "サーバー内部でエラーが発生しました" // 内部の詳細はクライアントに見せない
+		// 内部の詳細（SQLのエラーなど）はクライアントに見せず、ログにだけ残す
+		slog.ErrorContext(r.Context(), "リクエストの処理中にエラーが発生しました", slog.Any("error", err))
+		msg = InternalErrorMessage
 	}
-	JSON(w, status, ErrorResponse{Error: msg})
+	JSON(w, status, ErrorResponse{Error: ErrorBody{Code: code, Message: msg}})
 }
 
-// statusOf はエラーをHTTPステータスコードに対応づける
-func statusOf(err error) int {
+// classify はエラーを、HTTPステータスコードとエラーコードに対応づける
+func classify(err error) (status int, code string) {
 	switch {
 	case errors.Is(err, domain.ErrValidation):
-		return http.StatusBadRequest
+		return http.StatusBadRequest, "invalid_argument"
 	case errors.Is(err, usecase.ErrNotFound):
-		return http.StatusNotFound
+		return http.StatusNotFound, "not_found"
 	case errors.Is(err, domain.ErrConflict):
-		return http.StatusConflict
+		return http.StatusConflict, "conflict"
 	default:
-		return http.StatusInternalServerError
+		return http.StatusInternalServerError, "internal"
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/middleware"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/presenter"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/domain"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/usecase"
@@ -52,7 +53,7 @@ type createTaskRequest struct {
 func (c *TaskController) Create(w http.ResponseWriter, r *http.Request) {
 	var req createTaskRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		presenter.Error(w, ErrMalformedRequest)
+		presenter.Error(w, r, ErrMalformedRequest)
 		return
 	}
 	out, err := c.create.Execute(r.Context(), usecase.CreateTaskInput{
@@ -61,7 +62,7 @@ func (c *TaskController) Create(w http.ResponseWriter, r *http.Request) {
 		Description: req.Description,
 	})
 	if err != nil {
-		presenter.Error(w, err)
+		presenter.Error(w, r, err)
 		return
 	}
 	presenter.JSON(w, http.StatusCreated, presenter.NewTaskResponse(out))
@@ -71,7 +72,7 @@ func (c *TaskController) Create(w http.ResponseWriter, r *http.Request) {
 func (c *TaskController) List(w http.ResponseWriter, r *http.Request) {
 	outs, err := c.list.Execute(r.Context(), usecase.ListTasksInput{UserID: currentUserID(r)})
 	if err != nil {
-		presenter.Error(w, err)
+		presenter.Error(w, r, err)
 		return
 	}
 	presenter.JSON(w, http.StatusOK, presenter.NewTaskListResponse(outs))
@@ -84,7 +85,7 @@ func (c *TaskController) Get(w http.ResponseWriter, r *http.Request) {
 		TaskID: r.PathValue("id"),
 	})
 	if err != nil {
-		presenter.Error(w, err)
+		presenter.Error(w, r, err)
 		return
 	}
 	presenter.JSON(w, http.StatusOK, presenter.NewTaskResponse(out))
@@ -97,14 +98,13 @@ func (c *TaskController) Complete(w http.ResponseWriter, r *http.Request) {
 		TaskID: r.PathValue("id"),
 	})
 	if err != nil {
-		presenter.Error(w, err)
+		presenter.Error(w, r, err)
 		return
 	}
 	presenter.JSON(w, http.StatusOK, presenter.NewTaskResponse(out))
 }
 
-// currentUserID は操作しているユーザーのIDを返す
-// 第10章で認証を実装するまでは、X-User-ID ヘッダの値をそのまま使う（誰でもなりすませる仮の実装）
+// currentUserID は、認証ミドルウェアが context に入れた、操作しているユーザーのIDを返す
 func currentUserID(r *http.Request) string {
-	return r.Header.Get("X-User-ID")
+	return middleware.UserID(r.Context()).String()
 }
