@@ -1,14 +1,17 @@
 // cmd/api/main.go
-//
-// 第7章の時点では、設定・ログ・PostgreSQL・ルーターを組み合わせてAPIを動かす
 package main
 
 import (
 	"context"
-	"log"
+	"database/sql"
+	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/controller"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/gateway/postgres"
@@ -21,33 +24,59 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+// run はアプリケーションを起動し、終了のシグナルを受け取ったら後片付けをして戻る
+func run() error {
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	lg := logger.New(os.Stdout, cfg.LogLevel)
 
-	db, err := database.OpenPostgres(context.Background(), cfg.DatabaseURL)
-	if err != nil {
-		lg.Error("データベースに接続できません", "error", err)
-		os.Exit(1)
-	}
-	defer db.Close()
+	// Ctrl+C（SIGINT）やコンテナ停止時のSIGTERMで、ctxがキャンセルされる
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
+	db, err := database.OpenPostgres(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer db.Close() // サーバーが止まった後に閉じる
+
+	ln, err := net.Listen("tcp", cfg.HTTPAddr)
+	if err != nil {
+		return err
+	}
+	srv := &http.Server{
+		Handler:           newHandler(db),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	lg.Info("HTTPサーバーを起動します", slog.String("addr", ln.Addr().String()))
+	return web.Serve(ctx, srv, ln, lg)
+}
+
+// newHandler は、アプリケーションを構成するオブジェクトをすべて組み立てる（Composition Root）
+// 具体的な実装（PostgreSQLのリポジトリ、実際の時計など）を選んで結びつけるのは、ここだけ
+func newHandler(db *sql.DB) http.Handler {
+	// Frameworks & Drivers / Interface Adapters
 	repo := postgres.NewTaskRepository(db)
 	clock := system.Clock{}
 	ids := system.UUIDGenerator{}
-	ctrl := controller.NewTaskController(
-		usecase.NewCreateTask(repo, ids, clock),
-		usecase.NewGetTask(repo),
-		usecase.NewListTasks(repo),
-		usecase.NewCompleteTask(repo, clock),
-	)
 
-	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: web.NewRouter(ctrl)}
-	lg.Info("HTTPサーバーを起動します", slog.String("addr", cfg.HTTPAddr))
-	if err := srv.ListenAndServe(); err != nil {
-		lg.Error("HTTPサーバーが停止しました", "error", err)
-		os.Exit(1)
-	}
+	// Use Cases
+	createTask := usecase.NewCreateTask(repo, ids, clock)
+	getTask := usecase.NewGetTask(repo)
+	listTasks := usecase.NewListTasks(repo)
+	completeTask := usecase.NewCompleteTask(repo, clock)
+
+	// Interface Adapters
+	tasks := controller.NewTaskController(createTask, getTask, listTasks, completeTask)
+
+	// Frameworks & Drivers
+	return web.NewRouter(tasks)
 }
