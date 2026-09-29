@@ -19,13 +19,15 @@ import (
 // Injectors from wire.go:
 
 func initializeHandler(db *sql.DB) http.Handler {
+	transactor := postgres.NewTransactor(db)
 	taskRepository := postgres.NewTaskRepository(db)
+	activityRepository := postgres.NewActivityRepository(db)
 	uuidGenerator := _wireUUIDGeneratorValue
 	clock := _wireClockValue
-	createTask := usecase.NewCreateTask(taskRepository, uuidGenerator, clock)
+	createTask := usecase.NewCreateTask(transactor, taskRepository, activityRepository, uuidGenerator, clock)
 	getTask := usecase.NewGetTask(taskRepository)
 	listTasks := usecase.NewListTasks(taskRepository)
-	completeTask := usecase.NewCompleteTask(taskRepository, clock)
+	completeTask := usecase.NewCompleteTask(transactor, taskRepository, activityRepository, clock)
 	taskController := controller.NewTaskController(createTask, getTask, listTasks, completeTask)
 	handler := web.NewRouter(taskController)
 	return handler

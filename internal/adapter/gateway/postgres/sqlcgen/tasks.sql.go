@@ -32,6 +32,29 @@ func (q *Queries) GetTask(ctx context.Context, id string) (Task, error) {
 	return i, err
 }
 
+const getTaskForUpdate = `-- name: GetTaskForUpdate :one
+SELECT id, owner_id, title, description, status, created_at, completed_at
+FROM tasks
+WHERE id = $1
+FOR UPDATE
+`
+
+// 行ロックを取って読む。同じタスクを更新しようとする他のトランザクションは、コミットまで待たされる
+func (q *Queries) GetTaskForUpdate(ctx context.Context, id string) (Task, error) {
+	row := q.db.QueryRowContext(ctx, getTaskForUpdate, id)
+	var i Task
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Title,
+		&i.Description,
+		&i.Status,
+		&i.CreatedAt,
+		&i.CompletedAt,
+	)
+	return i, err
+}
+
 const listTasksByOwner = `-- name: ListTasksByOwner :many
 SELECT id, owner_id, title, description, status, created_at, completed_at
 FROM tasks

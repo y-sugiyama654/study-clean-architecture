@@ -15,12 +15,15 @@ import (
 )
 
 func TestRouter(t *testing.T) {
-	repo := memory.NewTaskRepository()
+	store := memory.NewStore()
+	tx := memory.NewTransactor(store)
+	repo := memory.NewTaskRepository(store)
+	activities := memory.NewActivityRepository(store)
 	ctrl := controller.NewTaskController(
-		usecase.NewCreateTask(repo, system.UUIDGenerator{}, system.Clock{}),
+		usecase.NewCreateTask(tx, repo, activities, system.UUIDGenerator{}, system.Clock{}),
 		usecase.NewGetTask(repo),
 		usecase.NewListTasks(repo),
-		usecase.NewCompleteTask(repo, system.Clock{}),
+		usecase.NewCompleteTask(tx, repo, activities, system.Clock{}),
 	)
 	srv := httptest.NewServer(web.NewRouter(ctrl))
 	defer srv.Close()

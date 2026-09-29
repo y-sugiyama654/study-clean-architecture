@@ -16,13 +16,15 @@ type CreateTaskInput struct {
 
 // CreateTask はタスクを作成するユースケース
 type CreateTask struct {
-	repo  TaskRepository
-	ids   IDGenerator
-	clock Clock
+	tx         Transactor
+	repo       TaskRepository
+	activities ActivityRepository
+	ids        IDGenerator
+	clock      Clock
 }
 
-func NewCreateTask(repo TaskRepository, ids IDGenerator, clock Clock) *CreateTask {
-	return &CreateTask{repo: repo, ids: ids, clock: clock}
+func NewCreateTask(tx Transactor, repo TaskRepository, activities ActivityRepository, ids IDGenerator, clock Clock) *CreateTask {
+	return &CreateTask{tx: tx, repo: repo, activities: activities, ids: ids, clock: clock}
 }
 
 func (uc *CreateTask) Execute(ctx context.Context, in CreateTaskInput) (TaskOutput, error) {
@@ -39,11 +41,22 @@ func (uc *CreateTask) Execute(ctx context.Context, in CreateTaskInput) (TaskOutp
 		return TaskOutput{}, err
 	}
 
-	task, err := domain.NewTask(uc.ids.NewTaskID(), ownerID, title, desc, uc.clock.Now())
+	now := uc.clock.Now()
+	task, err := domain.NewTask(uc.ids.NewTaskID(), ownerID, title, desc, now)
 	if err != nil {
 		return TaskOutput{}, err
 	}
-	if err := uc.repo.Save(ctx, task); err != nil {
+
+	// タスクの保存と履歴の記録は、両方成功するか、両方なかったことになるかのどちらか
+	err = uc.tx.WithinTx(ctx, func(ctx context.Context) error {
+		if err := uc.repo.Save(ctx, task); err != nil {
+			return err
+		}
+		return uc.activities.Add(ctx, domain.Activity{
+			TaskID: task.ID(), ActorID: ownerID, Action: domain.ActivityCreated, OccurredAt: now,
+		})
+	})
+	if err != nil {
 		return TaskOutput{}, err
 	}
 	return newTaskOutput(task), nil

@@ -29,12 +29,15 @@ func (g *seqIDs) NewTaskID() domain.TaskID {
 }
 
 func newController() *controller.TaskController {
-	repo := memory.NewTaskRepository()
+	store := memory.NewStore()
+	tx := memory.NewTransactor(store)
+	repo := memory.NewTaskRepository(store)
+	activities := memory.NewActivityRepository(store)
 	return controller.NewTaskController(
-		usecase.NewCreateTask(repo, &seqIDs{}, fixedClock{}),
+		usecase.NewCreateTask(tx, repo, activities, &seqIDs{}, fixedClock{}),
 		usecase.NewGetTask(repo),
 		usecase.NewListTasks(repo),
-		usecase.NewCompleteTask(repo, fixedClock{}),
+		usecase.NewCompleteTask(tx, repo, activities, fixedClock{}),
 	)
 }
 

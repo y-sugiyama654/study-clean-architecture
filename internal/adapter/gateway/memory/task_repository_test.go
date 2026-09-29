@@ -14,7 +14,7 @@ import (
 
 func TestTaskRepository(t *testing.T) {
 	ctx := context.Background()
-	repo := memory.NewTaskRepository()
+	repo := memory.NewTaskRepository(memory.NewStore())
 	now := time.Date(2025, 8, 1, 9, 0, 0, 0, time.UTC)
 	title, _ := domain.NewTitle("牛乳を買う")
 	task, _ := domain.NewTask("task-1", "user-1", title, domain.Description{}, now)

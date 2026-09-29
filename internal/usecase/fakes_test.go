@@ -41,6 +41,10 @@ func (r *fakeTaskRepository) FindByID(_ context.Context, id domain.TaskID) (*dom
 	return t, nil
 }
 
+func (r *fakeTaskRepository) FindByIDForUpdate(ctx context.Context, id domain.TaskID) (*domain.Task, error) {
+	return r.FindByID(ctx, id)
+}
+
 func (r *fakeTaskRepository) ListByOwner(_ context.Context, ownerID domain.UserID) ([]*domain.Task, error) {
 	var result []*domain.Task
 	for _, t := range r.tasks {
@@ -50,6 +54,29 @@ func (r *fakeTaskRepository) ListByOwner(_ context.Context, ownerID domain.UserI
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].CreatedAt().Before(result[j].CreatedAt()) })
 	return result, nil
+}
+
+// fakeActivityRepository は記録された履歴をスライスに溜める
+type fakeActivityRepository struct {
+	activities []domain.Activity
+	addErr     error
+}
+
+func (r *fakeActivityRepository) Add(_ context.Context, a domain.Activity) error {
+	if r.addErr != nil {
+		return r.addErr
+	}
+	r.activities = append(r.activities, a)
+	return nil
+}
+
+// fakeTransactor はトランザクションを張らずに fn を呼ぶだけ
+// （ロールバックの動きは、Transactorの実装側のテストで確かめる）
+type fakeTransactor struct{ calls int }
+
+func (t *fakeTransactor) WithinTx(ctx context.Context, fn func(ctx context.Context) error) error {
+	t.calls++
+	return fn(ctx)
 }
 
 // fixedClock は常に同じ時刻を返す

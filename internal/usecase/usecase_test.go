@@ -13,7 +13,9 @@ import (
 
 func TestCreateTask(t *testing.T) {
 	repo := newFakeTaskRepository()
-	uc := usecase.NewCreateTask(repo, fixedIDGenerator{id: "task-1"}, fixedClock{now: testNow})
+	activities := &fakeActivityRepository{}
+	tx := &fakeTransactor{}
+	uc := usecase.NewCreateTask(tx, repo, activities, fixedIDGenerator{id: "task-1"}, fixedClock{now: testNow})
 
 	out, err := uc.Execute(context.Background(), usecase.CreateTaskInput{
 		UserID: "user-1", Title: "  牛乳を買う ", Description: "低脂肪のもの",
@@ -32,6 +34,13 @@ func TestCreateTask(t *testing.T) {
 	if _, ok := repo.tasks["task-1"]; !ok {
 		t.Error("タスクが保存されていない")
 	}
+	wantActivity := domain.Activity{TaskID: "task-1", ActorID: "user-1", Action: domain.ActivityCreated, OccurredAt: testNow}
+	if len(activities.activities) != 1 || activities.activities[0] != wantActivity {
+		t.Errorf("作成の履歴が記録されていない: %+v", activities.activities)
+	}
+	if tx.calls != 1 {
+		t.Errorf("保存はトランザクションの中で行うはず: WithinTxの呼び出し %d回", tx.calls)
+	}
 }
 
 func TestCreateTask_Errors(t *testing.T) {
@@ -39,17 +48,20 @@ func TestCreateTask_Errors(t *testing.T) {
 		name    string
 		input   usecase.CreateTaskInput
 		saveErr error
+		addErr  error
 		wantErr error
 	}{
 		{name: "タイトルが空", input: usecase.CreateTaskInput{UserID: "user-1", Title: ""}, wantErr: domain.ErrTitleRequired},
 		{name: "ユーザーIDが空", input: usecase.CreateTaskInput{UserID: "", Title: "牛乳を買う"}, wantErr: domain.ErrUserIDRequired},
 		{name: "保存に失敗", input: usecase.CreateTaskInput{UserID: "user-1", Title: "牛乳を買う"}, saveErr: errDB, wantErr: errDB},
+		{name: "履歴の記録に失敗", input: usecase.CreateTaskInput{UserID: "user-1", Title: "牛乳を買う"}, addErr: errDB, wantErr: errDB},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := newFakeTaskRepository()
 			repo.saveErr = tt.saveErr
-			uc := usecase.NewCreateTask(repo, fixedIDGenerator{id: "task-1"}, fixedClock{now: testNow})
+			activities := &fakeActivityRepository{addErr: tt.addErr}
+			uc := usecase.NewCreateTask(&fakeTransactor{}, repo, activities, fixedIDGenerator{id: "task-1"}, fixedClock{now: testNow})
 
 			_, err := uc.Execute(context.Background(), tt.input)
 			if !errors.Is(err, tt.wantErr) {
@@ -101,8 +113,9 @@ func TestListTasks(t *testing.T) {
 
 func TestCompleteTask(t *testing.T) {
 	repo := newFakeTaskRepository(newTask("task-1", "user-1", testNow))
+	activities := &fakeActivityRepository{}
 	completedAt := testNow.Add(2 * time.Hour)
-	uc := usecase.NewCompleteTask(repo, fixedClock{now: completedAt})
+	uc := usecase.NewCompleteTask(&fakeTransactor{}, repo, activities, fixedClock{now: completedAt})
 
 	out, err := uc.Execute(context.Background(), usecase.CompleteTaskInput{UserID: "user-1", TaskID: "task-1"})
 	if err != nil {
@@ -114,6 +127,9 @@ func TestCompleteTask(t *testing.T) {
 	if repo.tasks["task-1"].Status() != domain.StatusDone {
 		t.Error("完了した状態が保存されていない")
 	}
+	if len(activities.activities) != 1 || activities.activities[0].Action != domain.ActivityCompleted {
+		t.Errorf("完了の履歴が記録されていない: %+v", activities.activities)
+	}
 
 	// 2回目は「完了済み」のエラー
 	_, err = uc.Execute(context.Background(), usecase.CompleteTaskInput{UserID: "user-1", TaskID: "task-1"})
@@ -124,7 +140,7 @@ func TestCompleteTask(t *testing.T) {
 
 func TestCompleteTask_OtherUsersTask(t *testing.T) {
 	repo := newFakeTaskRepository(newTask("task-1", "user-1", testNow))
-	uc := usecase.NewCompleteTask(repo, fixedClock{now: testNow})
+	uc := usecase.NewCompleteTask(&fakeTransactor{}, repo, &fakeActivityRepository{}, fixedClock{now: testNow})
 
 	_, err := uc.Execute(context.Background(), usecase.CompleteTaskInput{UserID: "user-2", TaskID: "task-1"})
 	if !errors.Is(err, usecase.ErrTaskNotFound) {

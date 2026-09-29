@@ -14,6 +14,13 @@ SELECT id, owner_id, title, description, status, created_at, completed_at
 FROM tasks
 WHERE id = $1;
 
+-- name: GetTaskForUpdate :one
+-- 行ロックを取って読む。同じタスクを更新しようとする他のトランザクションは、コミットまで待たされる
+SELECT id, owner_id, title, description, status, created_at, completed_at
+FROM tasks
+WHERE id = $1
+FOR UPDATE;
+
 -- name: ListTasksByOwner :many
 SELECT id, owner_id, title, description, status, created_at, completed_at
 FROM tasks

@@ -23,16 +23,17 @@ func NewGetTask(repo TaskRepository) *GetTask {
 }
 
 func (uc *GetTask) Execute(ctx context.Context, in GetTaskInput) (TaskOutput, error) {
-	task, err := findOwnTask(ctx, uc.repo, in.UserID, in.TaskID)
+	task, err := findOwnTask(ctx, uc.repo.FindByID, in.UserID, in.TaskID)
 	if err != nil {
 		return TaskOutput{}, err
 	}
 	return newTaskOutput(task), nil
 }
 
-// findOwnTask は、ユーザーが所有するタスクを探す
+// findOwnTask は、findで探したタスクのうち、ユーザーが所有するものだけを返す
 // 他人のタスクは「存在しない」ものとして扱う（存在すること自体を知られないようにする）
-func findOwnTask(ctx context.Context, repo TaskRepository, userID, taskID string) (*domain.Task, error) {
+func findOwnTask(ctx context.Context, find func(context.Context, domain.TaskID) (*domain.Task, error),
+	userID, taskID string) (*domain.Task, error) {
 	uid, err := domain.NewUserID(userID)
 	if err != nil {
 		return nil, err
@@ -41,7 +42,7 @@ func findOwnTask(ctx context.Context, repo TaskRepository, userID, taskID string
 	if err != nil {
 		return nil, err
 	}
-	task, err := repo.FindByID(ctx, tid)
+	task, err := find(ctx, tid)
 	if err != nil {
 		return nil, err
 	}

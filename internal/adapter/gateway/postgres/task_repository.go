@@ -15,17 +15,17 @@ import (
 
 // TaskRepository はタスクをPostgreSQLに保存する usecase.TaskRepository の実装
 type TaskRepository struct {
-	q *sqlcgen.Queries
+	db *sql.DB
 }
 
 var _ usecase.TaskRepository = (*TaskRepository)(nil)
 
 func NewTaskRepository(db *sql.DB) *TaskRepository {
-	return &TaskRepository{q: sqlcgen.New(db)}
+	return &TaskRepository{db: db}
 }
 
 func (r *TaskRepository) Save(ctx context.Context, task *domain.Task) error {
-	err := r.q.UpsertTask(ctx, sqlcgen.UpsertTaskParams{
+	err := queries(ctx, r.db).UpsertTask(ctx, sqlcgen.UpsertTaskParams{
 		ID:          task.ID().String(),
 		OwnerID:     task.OwnerID().String(),
 		Title:       task.Title().String(),
@@ -41,7 +41,16 @@ func (r *TaskRepository) Save(ctx context.Context, task *domain.Task) error {
 }
 
 func (r *TaskRepository) FindByID(ctx context.Context, id domain.TaskID) (*domain.Task, error) {
-	row, err := r.q.GetTask(ctx, id.String())
+	row, err := queries(ctx, r.db).GetTask(ctx, id.String())
+	return toEntityOrNotFound(row, err)
+}
+
+func (r *TaskRepository) FindByIDForUpdate(ctx context.Context, id domain.TaskID) (*domain.Task, error) {
+	row, err := queries(ctx, r.db).GetTaskForUpdate(ctx, id.String())
+	return toEntityOrNotFound(row, err)
+}
+
+func toEntityOrNotFound(row sqlcgen.Task, err error) (*domain.Task, error) {
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, usecase.ErrTaskNotFound // データベースの都合のエラーを、ユースケースが決めたエラーに変換する
 	}
@@ -52,7 +61,7 @@ func (r *TaskRepository) FindByID(ctx context.Context, id domain.TaskID) (*domai
 }
 
 func (r *TaskRepository) ListByOwner(ctx context.Context, ownerID domain.UserID) ([]*domain.Task, error) {
-	rows, err := r.q.ListTasksByOwner(ctx, ownerID.String())
+	rows, err := queries(ctx, r.db).ListTasksByOwner(ctx, ownerID.String())
 	if err != nil {
 		return nil, fmt.Errorf("postgres: タスクの一覧を取得できません: %w", err)
 	}

@@ -64,15 +64,17 @@ func run() error {
 // 具体的な実装（PostgreSQLのリポジトリ、実際の時計など）を選んで結びつけるのは、ここだけ
 func newHandler(db *sql.DB) http.Handler {
 	// Frameworks & Drivers / Interface Adapters
+	tx := postgres.NewTransactor(db)
 	repo := postgres.NewTaskRepository(db)
+	activities := postgres.NewActivityRepository(db)
 	clock := system.Clock{}
 	ids := system.UUIDGenerator{}
 
 	// Use Cases
-	createTask := usecase.NewCreateTask(repo, ids, clock)
+	createTask := usecase.NewCreateTask(tx, repo, activities, ids, clock)
 	getTask := usecase.NewGetTask(repo)
 	listTasks := usecase.NewListTasks(repo)
-	completeTask := usecase.NewCompleteTask(repo, clock)
+	completeTask := usecase.NewCompleteTask(tx, repo, activities, clock)
 
 	// Interface Adapters
 	tasks := controller.NewTaskController(createTask, getTask, listTasks, completeTask)

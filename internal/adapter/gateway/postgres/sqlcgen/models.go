@@ -18,3 +18,11 @@ type Task struct {
 	CreatedAt   time.Time
 	CompletedAt sql.NullTime
 }
+
+type TaskActivity struct {
+	ID         int64
+	TaskID     string
+	ActorID    string
+	Action     string
+	OccurredAt time.Time
+}

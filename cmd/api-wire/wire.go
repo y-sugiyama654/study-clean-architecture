@@ -23,7 +23,9 @@ import (
 func initializeHandler(db *sql.DB) http.Handler {
 	wire.Build(
 		// 実装を作るプロバイダ
+		postgres.NewTransactor,
 		postgres.NewTaskRepository,
+		postgres.NewActivityRepository,
 		wire.Value(system.Clock{}),
 		wire.Value(system.UUIDGenerator{}),
 		usecase.NewCreateTask,
@@ -34,7 +36,9 @@ func initializeHandler(db *sql.DB) http.Handler {
 		web.NewRouter,
 
 		// インターフェースと実装の対応
+		wire.Bind(new(usecase.Transactor), new(*postgres.Transactor)),
 		wire.Bind(new(usecase.TaskRepository), new(*postgres.TaskRepository)),
+		wire.Bind(new(usecase.ActivityRepository), new(*postgres.ActivityRepository)),
 		wire.Bind(new(usecase.Clock), new(system.Clock)),
 		wire.Bind(new(usecase.IDGenerator), new(system.UUIDGenerator)),
 		wire.Bind(new(controller.CreateTaskUsecase), new(*usecase.CreateTask)),
