@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/gateway/notifier"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/gateway/postgres"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/domain"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/infrastructure/system"
@@ -147,7 +148,7 @@ func TestPostgres(t *testing.T) {
 
 	t.Run("同時に完了にしても成功するのは1回だけ", func(t *testing.T) {
 		create := usecase.NewCreateTask(tx, repo, activities, system.UUIDGenerator{}, system.Clock{})
-		complete := usecase.NewCompleteTask(tx, repo, activities, system.Clock{})
+		complete := usecase.NewCompleteTask(tx, repo, activities, notifier.Nop{}, system.Clock{})
 		out, err := create.Execute(ctx, usecase.CreateTaskInput{UserID: "dave", Title: "牛乳を買う"})
 		if err != nil {
 			t.Fatal(err)

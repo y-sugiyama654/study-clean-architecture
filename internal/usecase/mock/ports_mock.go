@@ -15,6 +15,7 @@ import (
 	time "time"
 
 	domain "github.com/y-sugiyama654/study-clean-architecture/internal/domain"
+	usecase "github.com/y-sugiyama654/study-clean-architecture/internal/usecase"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -175,6 +176,42 @@ func (m *MockTransactor) WithinTx(ctx context.Context, fn func(context.Context) 
 func (mr *MockTransactorMockRecorder) WithinTx(ctx, fn any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithinTx", reflect.TypeOf((*MockTransactor)(nil).WithinTx), ctx, fn)
+}
+
+// MockNotifier is a mock of Notifier interface.
+type MockNotifier struct {
+	ctrl     *gomock.Controller
+	recorder *MockNotifierMockRecorder
+	isgomock struct{}
+}
+
+// MockNotifierMockRecorder is the mock recorder for MockNotifier.
+type MockNotifierMockRecorder struct {
+	mock *MockNotifier
+}
+
+// NewMockNotifier creates a new mock instance.
+func NewMockNotifier(ctrl *gomock.Controller) *MockNotifier {
+	mock := &MockNotifier{ctrl: ctrl}
+	mock.recorder = &MockNotifierMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockNotifier) EXPECT() *MockNotifierMockRecorder {
+	return m.recorder
+}
+
+// TaskCompleted mocks base method.
+func (m *MockNotifier) TaskCompleted(ctx context.Context, task usecase.TaskOutput) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "TaskCompleted", ctx, task)
+}
+
+// TaskCompleted indicates an expected call of TaskCompleted.
+func (mr *MockNotifierMockRecorder) TaskCompleted(ctx, task any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TaskCompleted", reflect.TypeOf((*MockNotifier)(nil).TaskCompleted), ctx, task)
 }
 
 // MockClock is a mock of Clock interface.

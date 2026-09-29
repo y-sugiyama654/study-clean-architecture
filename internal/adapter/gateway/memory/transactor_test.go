@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/gateway/memory"
+	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/gateway/notifier"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/domain"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/infrastructure/system"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/usecase"
@@ -50,7 +51,7 @@ func TestCompleteTask_Concurrent(t *testing.T) {
 	repo := memory.NewTaskRepository(store)
 	activities := memory.NewActivityRepository(store)
 	create := usecase.NewCreateTask(tx, repo, activities, system.UUIDGenerator{}, system.Clock{})
-	complete := usecase.NewCompleteTask(tx, repo, activities, system.Clock{})
+	complete := usecase.NewCompleteTask(tx, repo, activities, notifier.Nop{}, system.Clock{})
 
 	out, err := create.Execute(ctx, usecase.CreateTaskInput{UserID: "user-1", Title: "牛乳を買う"})
 	if err != nil {

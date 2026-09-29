@@ -10,6 +10,7 @@ import (
 
 	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/controller"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/gateway/memory"
+	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/gateway/notifier"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/infrastructure/auth"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/infrastructure/system"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/infrastructure/web"
@@ -25,7 +26,7 @@ func TestRouter(t *testing.T) {
 		usecase.NewCreateTask(tx, repo, activities, system.UUIDGenerator{}, system.Clock{}),
 		usecase.NewGetTask(repo),
 		usecase.NewListTasks(repo),
-		usecase.NewCompleteTask(tx, repo, activities, system.Clock{}),
+		usecase.NewCompleteTask(tx, repo, activities, notifier.Nop{}, system.Clock{}),
 	)
 	verifier := auth.NewStaticTokenVerifier(map[string]string{"test-token-1": "user-1"})
 	srv := httptest.NewServer(web.NewRouter(ctrl, verifier, slog.New(slog.DiscardHandler)))

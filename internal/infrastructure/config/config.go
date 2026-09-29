@@ -11,22 +11,32 @@ import (
 
 // Config はアプリケーションの設定
 type Config struct {
-	HTTPAddr    string            // HTTPサーバーが待ち受けるアドレス
-	DatabaseURL string            // PostgreSQLの接続URL
-	LogLevel    slog.Level        // 出力するログの最低レベル
-	APITokens   map[string]string // APIトークン → ユーザーID
+	HTTPAddr         string            // HTTPサーバーが待ち受けるアドレス
+	Storage          string            // データの保存先: "postgres" または "memory"
+	DatabaseURL      string            // PostgreSQLの接続URL（Storage が "postgres" のとき）
+	LogLevel         slog.Level        // 出力するログの最低レベル
+	APITokens        map[string]string // APIトークン → ユーザーID
+	NotifyWebhookURL string            // タスクの完了を知らせるWebhookのURL（空なら通知しない）
 }
 
 // Load は環境変数から設定を読み込む
 // 接続先などの環境ごとに変わる値や、パスワードを含む値はコードに書かず、環境変数で渡す
 func Load() (Config, error) {
 	cfg := Config{
-		HTTPAddr:    getenv("HTTP_ADDR", ":8080"),
-		DatabaseURL: os.Getenv("DATABASE_URL"),
-		LogLevel:    slog.LevelInfo,
+		HTTPAddr:         getenv("HTTP_ADDR", ":8080"),
+		Storage:          getenv("STORAGE", "postgres"),
+		DatabaseURL:      os.Getenv("DATABASE_URL"),
+		LogLevel:         slog.LevelInfo,
+		NotifyWebhookURL: os.Getenv("NOTIFY_WEBHOOK_URL"),
 	}
-	if cfg.DatabaseURL == "" {
-		return Config{}, errors.New("config: 環境変数 DATABASE_URL を設定してください")
+	switch cfg.Storage {
+	case "postgres":
+		if cfg.DatabaseURL == "" {
+			return Config{}, errors.New("config: 環境変数 DATABASE_URL を設定してください")
+		}
+	case "memory":
+	default:
+		return Config{}, fmt.Errorf("config: STORAGE は postgres か memory を指定してください: %q", cfg.Storage)
 	}
 	tokens, err := parseTokens(os.Getenv("API_TOKENS"))
 	if err != nil {

@@ -27,6 +27,7 @@ func TestCompleteTask_WithGomock(t *testing.T) {
 	tx := mock.NewMockTransactor(ctrl)
 	repo := mock.NewMockTaskRepository(ctrl)
 	activities := mock.NewMockActivityRepository(ctrl)
+	notifier := mock.NewMockNotifier(ctrl)
 	clock := mock.NewMockClock(ctrl)
 
 	completedAt := testNow.Add(time.Hour)
@@ -42,8 +43,12 @@ func TestCompleteTask_WithGomock(t *testing.T) {
 	activities.EXPECT().Add(gomock.Any(), domain.Activity{
 		TaskID: "task-1", ActorID: "user-1", Action: domain.ActivityCompleted, OccurredAt: completedAt,
 	}).Return(nil)
+	// 完了したタスクが1回だけ通知されること
+	notifier.EXPECT().TaskCompleted(gomock.Any(), gomock.Cond(func(out usecase.TaskOutput) bool {
+		return out.ID == "task-1" && out.Status == "done"
+	})).Times(1)
 
-	uc := usecase.NewCompleteTask(tx, repo, activities, clock)
+	uc := usecase.NewCompleteTask(tx, repo, activities, notifier, clock)
 	if _, err := uc.Execute(context.Background(), usecase.CompleteTaskInput{UserID: "user-1", TaskID: "task-1"}); err != nil {
 		t.Fatal(err)
 	}
@@ -54,6 +59,7 @@ func TestCompleteTask_WithGomock_AlreadyCompleted(t *testing.T) {
 	tx := mock.NewMockTransactor(ctrl)
 	repo := mock.NewMockTaskRepository(ctrl)
 	activities := mock.NewMockActivityRepository(ctrl)
+	notifier := mock.NewMockNotifier(ctrl)
 	clock := mock.NewMockClock(ctrl)
 
 	done := newTask("task-1", "user-1", testNow)
@@ -62,9 +68,9 @@ func TestCompleteTask_WithGomock_AlreadyCompleted(t *testing.T) {
 	runInTx(tx)
 	clock.EXPECT().Now().Return(testNow.Add(time.Hour))
 	repo.EXPECT().FindByIDForUpdate(gomock.Any(), domain.TaskID("task-1")).Return(done, nil)
-	// Save と Add は EXPECT していないので、呼ばれたらテストが失敗する
+	// Save・Add・TaskCompleted は EXPECT していないので、呼ばれたらテストが失敗する
 
-	uc := usecase.NewCompleteTask(tx, repo, activities, clock)
+	uc := usecase.NewCompleteTask(tx, repo, activities, notifier, clock)
 	_, err := uc.Execute(context.Background(), usecase.CompleteTaskInput{UserID: "user-1", TaskID: "task-1"})
 	if !errors.Is(err, domain.ErrTaskAlreadyCompleted) {
 		t.Errorf("want ErrTaskAlreadyCompleted, got %v", err)

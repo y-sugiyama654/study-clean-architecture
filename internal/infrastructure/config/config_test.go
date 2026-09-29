@@ -28,6 +28,25 @@ func TestLoad(t *testing.T) {
 	}
 }
 
+func TestLoad_Storage(t *testing.T) {
+	// メモリに保存する場合は、DATABASE_URL はなくてよい
+	t.Setenv("STORAGE", "memory")
+	t.Setenv("DATABASE_URL", "")
+	t.Setenv("API_TOKENS", "test-token-a:alice")
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Storage != "memory" {
+		t.Errorf("want memory, got %s", cfg.Storage)
+	}
+
+	t.Setenv("STORAGE", "mysql")
+	if _, err := config.Load(); err == nil {
+		t.Error("未知の STORAGE がエラーにならなかった")
+	}
+}
+
 func TestLoad_Errors(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
 	if _, err := config.Load(); err == nil {

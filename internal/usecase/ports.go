@@ -37,6 +37,13 @@ type Transactor interface {
 	WithinTx(ctx context.Context, fn func(ctx context.Context) error) error
 }
 
+// Notifier はタスクに関する出来事を外部に知らせる
+// 通知に失敗しても、タスクの操作そのものは取り消さない。そのためエラーは返さず、
+// 失敗したときの記録（ログなど）は実装側で行う
+type Notifier interface {
+	TaskCompleted(ctx context.Context, task TaskOutput)
+}
+
 // Clock は現在時刻を返す
 type Clock interface {
 	Now() time.Time

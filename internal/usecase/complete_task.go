@@ -18,11 +18,12 @@ type CompleteTask struct {
 	tx         Transactor
 	repo       TaskRepository
 	activities ActivityRepository
+	notifier   Notifier
 	clock      Clock
 }
 
-func NewCompleteTask(tx Transactor, repo TaskRepository, activities ActivityRepository, clock Clock) *CompleteTask {
-	return &CompleteTask{tx: tx, repo: repo, activities: activities, clock: clock}
+func NewCompleteTask(tx Transactor, repo TaskRepository, activities ActivityRepository, notifier Notifier, clock Clock) *CompleteTask {
+	return &CompleteTask{tx: tx, repo: repo, activities: activities, notifier: notifier, clock: clock}
 }
 
 func (uc *CompleteTask) Execute(ctx context.Context, in CompleteTaskInput) (TaskOutput, error) {
@@ -49,5 +50,10 @@ func (uc *CompleteTask) Execute(ctx context.Context, in CompleteTaskInput) (Task
 	if err != nil {
 		return TaskOutput{}, err
 	}
-	return newTaskOutput(task), nil
+
+	// 通知はトランザクションがコミットされた後に送る
+	// （トランザクションの中で送ると、送った後でロールバックされたときに、起きていないことを通知してしまう）
+	out := newTaskOutput(task)
+	uc.notifier.TaskCompleted(ctx, out)
+	return out, nil
 }

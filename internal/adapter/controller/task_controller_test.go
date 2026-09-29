@@ -12,6 +12,7 @@ import (
 
 	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/controller"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/gateway/memory"
+	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/gateway/notifier"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/adapter/middleware"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/domain"
 	"github.com/y-sugiyama654/study-clean-architecture/internal/usecase"
@@ -38,7 +39,7 @@ func newController() *controller.TaskController {
 		usecase.NewCreateTask(tx, repo, activities, &seqIDs{}, fixedClock{}),
 		usecase.NewGetTask(repo),
 		usecase.NewListTasks(repo),
-		usecase.NewCompleteTask(tx, repo, activities, fixedClock{}),
+		usecase.NewCompleteTask(tx, repo, activities, notifier.Nop{}, fixedClock{}),
 	)
 }
 

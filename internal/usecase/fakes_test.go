@@ -79,6 +79,13 @@ func (t *fakeTransactor) WithinTx(ctx context.Context, fn func(ctx context.Conte
 	return fn(ctx)
 }
 
+// fakeNotifier は通知された内容を覚えておく
+type fakeNotifier struct{ completed []usecase.TaskOutput }
+
+func (n *fakeNotifier) TaskCompleted(_ context.Context, task usecase.TaskOutput) {
+	n.completed = append(n.completed, task)
+}
+
 // fixedClock は常に同じ時刻を返す
 type fixedClock struct{ now time.Time }
 

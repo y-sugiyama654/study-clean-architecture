@@ -114,8 +114,9 @@ func TestListTasks(t *testing.T) {
 func TestCompleteTask(t *testing.T) {
 	repo := newFakeTaskRepository(newTask("task-1", "user-1", testNow))
 	activities := &fakeActivityRepository{}
+	notifier := &fakeNotifier{}
 	completedAt := testNow.Add(2 * time.Hour)
-	uc := usecase.NewCompleteTask(&fakeTransactor{}, repo, activities, fixedClock{now: completedAt})
+	uc := usecase.NewCompleteTask(&fakeTransactor{}, repo, activities, notifier, fixedClock{now: completedAt})
 
 	out, err := uc.Execute(context.Background(), usecase.CompleteTaskInput{UserID: "user-1", TaskID: "task-1"})
 	if err != nil {
@@ -130,17 +131,23 @@ func TestCompleteTask(t *testing.T) {
 	if len(activities.activities) != 1 || activities.activities[0].Action != domain.ActivityCompleted {
 		t.Errorf("完了の履歴が記録されていない: %+v", activities.activities)
 	}
+	if len(notifier.completed) != 1 || notifier.completed[0].ID != "task-1" {
+		t.Errorf("完了が通知されていない: %+v", notifier.completed)
+	}
 
-	// 2回目は「完了済み」のエラー
+	// 2回目は「完了済み」のエラーで、通知もされない
 	_, err = uc.Execute(context.Background(), usecase.CompleteTaskInput{UserID: "user-1", TaskID: "task-1"})
 	if !errors.Is(err, domain.ErrTaskAlreadyCompleted) {
 		t.Errorf("want ErrTaskAlreadyCompleted, got %v", err)
+	}
+	if len(notifier.completed) != 1 {
+		t.Errorf("失敗したときに通知されてしまった: %d回", len(notifier.completed))
 	}
 }
 
 func TestCompleteTask_OtherUsersTask(t *testing.T) {
 	repo := newFakeTaskRepository(newTask("task-1", "user-1", testNow))
-	uc := usecase.NewCompleteTask(&fakeTransactor{}, repo, &fakeActivityRepository{}, fixedClock{now: testNow})
+	uc := usecase.NewCompleteTask(&fakeTransactor{}, repo, &fakeActivityRepository{}, &fakeNotifier{}, fixedClock{now: testNow})
 
 	_, err := uc.Execute(context.Background(), usecase.CompleteTaskInput{UserID: "user-2", TaskID: "task-1"})
 	if !errors.Is(err, usecase.ErrTaskNotFound) {
